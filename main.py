@@ -4,6 +4,7 @@ import random
 import math
 import sys
 import neat
+import glob
 
 pygame.init()
 
@@ -17,12 +18,18 @@ RUNNING = [pygame.image.load(os.path.join("Assets/Dino", "DinoRun1.png")),
 
 JUMPING = pygame.image.load(os.path.join("Assets/Dino", "DinoJump.png"))
 
+DOWN = [pygame.image.load(os.path.join("Assets/Dino", "DinoDown1.png")),
+        pygame.image.load(os.path.join("Assets/Dino", "DinoDown2.png"))]
+
 SMALL_CACTUS = [pygame.image.load(os.path.join("Assets/Cactus", "SmallCactus1.png")),
                 pygame.image.load(os.path.join("Assets/Cactus", "SmallCactus2.png")),
                 pygame.image.load(os.path.join("Assets/Cactus", "SmallCactus3.png"))]
 LARGE_CACTUS = [pygame.image.load(os.path.join("Assets/Cactus", "LargeCactus1.png")),
                 pygame.image.load(os.path.join("Assets/Cactus", "LargeCactus2.png")),
                 pygame.image.load(os.path.join("Assets/Cactus", "LargeCactus3.png"))]
+BIRDS =        [pygame.image.load(os.path.join("Assets/Birds", "BirdWingUp.png")),
+                pygame.image.load(os.path.join("Assets/Birds", "BirdWingUp.png"))]
+BIRDSG =       [pygame.image.load(os.path.join("Assets/Birds", "BirdWingGroup.png"))]
 
 BG = pygame.image.load(os.path.join("Assets/Other", "Track.png"))
 
@@ -33,11 +40,13 @@ class Dinosaur:
     X_POS = 80
     Y_POS = 310
     JUMP_VEL = 8.5
+    Y_POS_DOWN = 350
 
     def __init__(self, img=RUNNING[0]):
         self.image = img
         self.dino_run = True
         self.dino_jump = False
+        self.dino_down = False
         self.jump_vel = self.JUMP_VEL
         self.rect = pygame.Rect(self.X_POS, self.Y_POS, img.get_width(), img.get_height())
         self.color = (random.randint(0, 255), random.randint(0, 255), random.randint(0, 255))
@@ -48,9 +57,18 @@ class Dinosaur:
             self.run()
         if self.dino_jump:
             self.jump()
+        if self.dino_down:
+            self.down()
         if self.step_index >= 10:
             self.step_index = 0
 
+    def down(self):
+        self.image = DOWN[self.step_index // 5]
+        self.dino_rect = self.image.get_rect()
+        self.rect.x = self.X_POS
+        self.rect.y = self.Y_POS_DOWN
+        self.step_index += 1
+       
     def jump(self):
         self.image = JUMPING
         if self.dino_jump:
@@ -101,6 +119,31 @@ class LargeCactus(Obstacle):
         super().__init__(image, number_of_cacti)
         self.rect.y = 300
 
+class HighBirds(Obstacle):
+    def __init__(self, image, number_of_cacti):
+        super().__init__(image, number_of_cacti)
+        self.rect.y = 195
+        # self.rect.x = self.rect.x + number_of_cacti
+
+class LowBirds(Obstacle):
+    def __init__(self, image, number_of_cacti):
+        super().__init__(image, number_of_cacti)
+        self.rect.y = 280
+        # self.rect.x = self.rect.x + 20
+
+class MultipleLowBirds(Obstacle):
+    def __init__(self, image, number_of_cacti):
+        self.type = 0
+        super().__init__( image, self.type)
+        self.rect.y = 280
+        self.index = 0
+
+    # def draw(self, SCREEN):
+    #     if self.index >= 9:
+    #         self.index = 0
+    #     SCREEN.blit(self.image[self.index // 5], self.rect)
+    #     self.index += 1
+
 
 def remove(index):
     dinosaurs.pop(index)
@@ -113,7 +156,7 @@ def distance(pos_a, pos_b):
     dy = pos_a[1]-pos_b[1]
     return math.sqrt(dx**2+dy**2)
 
-
+record = 0
 def eval_genomes(genomes, config):
     global game_speed, x_pos_bg, y_pos_bg, obstacles, dinosaurs, ge, nets, points
     clock = pygame.time.Clock()
@@ -136,12 +179,16 @@ def eval_genomes(genomes, config):
         genome.fitness = 0
 
     def score():
-        global points, game_speed
+        global points, game_speed, record
         points += 1
         if points % 100 == 0:
             game_speed += 1
         text = FONT.render(f'Points:  {str(points)}', True, (0, 0, 0))
+        if points >= record:
+            record = points
+        text_record = FONT.render(f'Record: {str(record)}', True, (0, 0, 0))
         SCREEN.blit(text, (950, 50))
+        SCREEN.blit(text_record, (950, 70))
 
     def statistics():
         global dinosaurs, game_speed, ge
@@ -179,37 +226,71 @@ def eval_genomes(genomes, config):
             break
 
         if len(obstacles) == 0:
-            rand_int = random.randint(0, 1)
+            rand_int = random.randint(0, 4)
+            # rand_int = 4
             if rand_int == 0:
                 obstacles.append(SmallCactus(SMALL_CACTUS, random.randint(0, 2)))
             elif rand_int == 1:
                 obstacles.append(LargeCactus(LARGE_CACTUS, random.randint(0, 2)))
+            elif rand_int == 2:
+                for n in range(1, 4):
+                    obstacles.append(HighBirds(BIRDS, 1))
+            elif rand_int == 3:
+                for n in range(1, 4):
+                    obstacles.append(LowBirds(BIRDS, 1))
+            elif rand_int == 4:
+                obstacles.append(MultipleLowBirds(BIRDSG, 1))
 
         for obstacle in obstacles:
             obstacle.draw(SCREEN)
             obstacle.update()
             for i, dinosaur in enumerate(dinosaurs):
                 if dinosaur.rect.colliderect(obstacle.rect):
-                    ge[i].fitness -= 1
+                    # ge[i].fitness -= 1 
+                    ge[i].fitness -= 1 #points
                     remove(i)
+                else:
+                    ge[i].fitness += 2 #points
 
         for i, dinosaur in enumerate(dinosaurs):
+            # print(f"1: {obstacle.rect.midtop} 2: {obstacle.rect.midbottom} 3: {dinosaur.rect.x} {dinosaur.rect.y}")
             output = nets[i].activate((dinosaur.rect.y,
                                        distance((dinosaur.rect.x, dinosaur.rect.y),
-                                        obstacle.rect.midtop)))
-            if output[0] > 0.5 and dinosaur.rect.y == dinosaur.Y_POS:
-                dinosaur.dino_jump = True
+                                        obstacle.rect.midtop),
+                                        distance((dinosaur.rect.y, dinosaur.rect.y),
+                                        obstacle.rect.midtop),
+                                        game_speed
+                                        ))
+            print(f"outpu: {output}")
+            if output[0] >= 0 and output[1] >= 0 and dinosaur.rect.y >= dinosaur.Y_POS: # not dinosaur.dino_jump:
+                dinosaur.dino_down = False
                 dinosaur.dino_run = False
-
+                dinosaur.dino_jump = True
+            elif output[0] <= 0 and output[1] <= 0 and not dinosaur.dino_jump:
+                dinosaur.dino_down = True
+                dinosaur.dino_run = False
+                dinosaur.dino_jump = False                
+            elif not (dinosaur.dino_jump or dinosaur.dino_down):
+                dinosaur.dino_down = False
+                dinosaur.dino_run = True
+                dinosaur.dino_jump = False
+                
         statistics()
         score()
         background()
         clock.tick(30)
         pygame.display.update()
 
+network_dir = 'network'
+network_prefix = 'neat-checkpoint-'
+
+def last_network_checkpoint():
+    list_of_files = glob.glob(f'{network_dir}/*')
+    lastest_file = max(list_of_files, key=os.path.getctime)
+    return lastest_file
 
 # Setup the NEAT Neural Network
-def run(config_path):
+def run(config_path, restore_network=True):
     global pop
     config = neat.config.Config(
         neat.DefaultGenome,
@@ -218,12 +299,30 @@ def run(config_path):
         neat.DefaultStagnation,
         config_path
     )
+    restore_network = False
+    print(f"Restore Network: {restore_network}")
+    if restore_network == True:
+        pop = neat.Checkpointer.restore_checkpoint(last_network_checkpoint())
+    else:
+        pop = neat.Population(config, initial_state=None)
 
-    pop = neat.Population(config)
-    pop.run(eval_genomes, 50)
+    pop.add_reporter(neat.StdOutReporter(True))
+    stats = neat.StatisticsReporter()
+    pop.add_reporter(stats)
+    pop.add_reporter(neat.Checkpointer(1, 5,f'{network_dir}/{network_prefix}'))
+
+    pop.run(eval_genomes, 300)
+    # pop.run(eval_genomes)
+
+    stats.save()
+    print(f"Recorded: {record}")
+    
 
 
 if __name__ == '__main__':
+    restore_network = False
+    if len(sys.argv) > 2:
+        restore_network = True
     local_dir = os.path.dirname(__file__)
     config_path = os.path.join(local_dir, 'config.txt')
-    run(config_path)
+    run(config_path, restore_network)
